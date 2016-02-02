@@ -65,6 +65,17 @@ function onRun( context ) {
 	    }
 	}
 
+	function promptUserTryAgain() {
+	    var alert = [[NSAlert alloc] init];
+
+	    [alert addButtonWithTitle:"OK"];
+        [alert addButtonWithTitle:"Cancel"];
+
+	    [alert setMessageText:"Search Failed"];
+	    [alert setInformativeText:"Your search has no results. Please try again."];
+
+	    return [alert runModal] === NSAlertFirstButtonReturn );
+	}
 	function promptUserSearch() {
 	    var accessory = [[NSView alloc] initWithFrame:NSMakeRect( 0, 0, 200, 85 )],
 	        alert = [[NSAlert alloc] init],
@@ -103,7 +114,7 @@ function onRun( context ) {
 	    [alert addButtonWithTitle:"OK"];
         [alert addButtonWithTitle:"Cancel"];
 
-	    [alert setMessageText:"Search iTunes for App Icon"];
+	    [alert setMessageText:"Search iTunes for App Artwork"];
 
 	    if( [alert runModal] === NSAlertFirstButtonReturn ) {
 		    return {
@@ -174,7 +185,7 @@ function onRun( context ) {
         	return [NSJSONSerialization JSONObjectWithData:response options:null error:null];
         } else {
         	log( [err value] );
-        	throw "Failed to locate iTunes app. Please try again"
+        	return null;
         }
     }
     function getiTunesArtwork() {
@@ -190,6 +201,10 @@ function onRun( context ) {
 		if( search ) {
 			json = getiTunesAPIResponse( search.terms, search.entity );
 
+			log( json );
+			// Search failed; exit
+			if( !json || json.resultCount == 0 ) { return false; }
+			
 			if( typeof json !== "undefined" ) {
 				// Convert to JS object
 				json = JSON.parse( String( stringifyJSON( json ) ) );
@@ -266,21 +281,28 @@ function onRun( context ) {
 			}
 		}
     }
+    function run() {
+    	try{
+	    	var className;
 
-    try{
-    	var className;
-
-    	if( [selection count] > 0 ) {
-	    	className = [[selection firstObject] className];
-	    	if( className == "MSShapeGroup" || className == "MSBitmapLayer" ) {
-	    		getiTunesArtwork();
-	    	} else {
-	    		doc.showMessage( "Please select Rectangle or Image layers" );
-	    	}
-	    } else {
-	    	doc.showMessage( "No selection. Please select Rectangle or Image layers" );
+	    	if( [selection count] > 0 ) {
+		    	className = [[selection firstObject] className];
+		    	if( className == "MSShapeGroup" || className == "MSBitmapLayer" ) {
+		    		if( getiTunesArtwork() === false ) {
+		    			if( promptUserTryAgain() ) {
+		    				run();
+		    			}
+		    		}
+		    	} else {
+		    		doc.showMessage( "Please select Rectangle or Image layers" );
+		    	}
+		    } else {
+		    	doc.showMessage( "No selection. Please select Rectangle or Image layers" );
+		    }
+	    } catch( err ) {
+	    	log( "Uncaught error: " + err );
 	    }
-    } catch( err ) {
-    	log( "Uncaught error: " + err );
     }
+
+    run();
 }
