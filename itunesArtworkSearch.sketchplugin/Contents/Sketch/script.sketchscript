@@ -1,0 +1,286 @@
+function onRun( context ) {
+	var doc = context.document;
+		selection = context.selection;
+
+	function createLabel( frame, text, font ) {
+	    var label = [[NSTextField alloc] initWithFrame:frame];
+
+	    font = font || [NSFont systemFontOfSize:[NSFont systemFontSize]];
+	    
+	    [label setPlaceholderString:text];
+	    [label setFont:font];
+	    [label setBezeled:true];
+	    [label setDrawsBackground:false];
+	    [label setEditable:true];
+	    [label setSelectable:true];
+
+	    return label
+	}
+	function stringifyJSON( obj, prettyPrinted ) {
+        var err = [[MOPointer alloc] init],
+            prettySetting = prettyPrinted ? NSJSONWritingPrettyPrinted : 0,
+            jsonData = [NSJSONSerialization dataWithJSONObject:obj options:prettySetting error:err],
+            string;
+
+        if( [err value] ) {
+            throw "Stringify JSON error, " + [err value];
+        } else {
+             string = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
+             // Removes escape forward slashes
+            return [string stringByReplacingOccurrencesOfString:@"\\/" withString:@"/"];
+        }
+
+        return null
+    }
+    function stringByTruncatingToWidth( nsstring, width ) {
+	    var font = [NSFont systemFontOfSize:[NSFont systemFontSize]],
+	    	ellipsis = [@"" stringByAppendingString:@"..."],
+	    	widthWithEllipsis = width - [[ellipsis sizeWithFont:font].width],
+	    	min = 0,
+	    	max = Number( [nsstring length] ),
+	    	mid,
+	    	currentString,
+			currentSize;
+	    
+	    while( min < max ) {
+	    	mid = Math.floor( ( min + max ) / 2 );
+
+	        currentString = [nsstring substringWithRange:NSMakeRange( 0, mid )];
+	        currentSize = [currentString sizeWithFont:font];
+
+	        if ( currentSize.width < widthWithEllipsis ) {
+	            min = mid + 1;
+	        } else if( currentSize.width > widthWithEllipsis ) {
+	            max = mid - 1;
+	        } else {
+	            min = mid;
+	            break;
+	        }
+	    }
+
+	    if( [nsstring length] > min ) {
+	    	return [[nsstring substringWithRange:NSMakeRange( 0, min )] stringByAppendingString:ellipsis];
+	    } else {
+	    	return nsstring;
+	    }
+	}
+
+	function promptUserSearch() {
+	    var accessory = [[NSView alloc] initWithFrame:NSMakeRect( 0, 0, 200, 85 )],
+	        alert = [[NSAlert alloc] init],
+	        entities = [
+	        	{
+	        		entity: "software",
+	        		name: "iOS"
+	        	},
+	        	{
+	        		entity: "macSoftware",
+	        		name: "OSX"
+	        	}
+	        ];
+
+	    var textview = createLabel( NSMakeRect( 0, 60, 200, 25 ), "Twitter" ),
+	    	matrix = [[NSMatrix alloc] initWithFrame:NSMakeRect( 0, 0, 200, 50 )
+	            mode:NSRadioModeMatrix
+	            cellClass:[NSButtonCell class]
+	            numberOfRows:2
+	            numberOfColumns:1
+	        ];
+
+	    [matrix setCellSize:NSMakeSize( 200, 25 )];
+	    
+	    entities.forEach( function( entity, i ) {
+	    	var cell = [matrix cells][ i ];
+		    
+		    [cell setButtonType:NSRadioButton];
+		    [cell setTitle:entity.name];
+		    [cell setTag:i];
+	  	} );
+	  	
+	  	[accessory addSubview:textview];
+	  	[accessory addSubview:matrix];
+	    [alert setAccessoryView:accessory];
+	    [alert addButtonWithTitle:"OK"];
+        [alert addButtonWithTitle:"Cancel"];
+
+	    [alert setMessageText:"Search iTunes for App Icon"];
+
+	    if( [alert runModal] === NSAlertFirstButtonReturn ) {
+		    return {
+		    	terms: ( [textview stringValue] + "" ).trim(),
+		    	entity: entities[ [[matrix selectedCell] tag] ].entity
+		    };
+		} else {
+			return null;
+		}
+	}
+	function promptUserForArtwork( results ) {
+	    if( typeof results === "undefined" || results.length == 0 ) { return; }
+
+	    var maxScrollHeight = 400,
+	    	width = 400,
+			matrixCellHeight = 25,
+	    	scrollHeight = ( matrixCellHeight * results.length > maxScrollHeight ) ? maxScrollHeight : matrixCellHeight * results.length,
+	    	scrollView = [[NSScrollView alloc] initWithFrame:NSMakeRect( 0, 0, width, scrollHeight )],
+
+	    	matrix = [[NSMatrix alloc] initWithFrame:NSMakeRect( 0, 0, width, matrixCellHeight * results.length )
+	            mode:NSRadioModeMatrix
+	            cellClass:[NSButtonCell class]
+	            numberOfRows:results.length
+	            numberOfColumns:1
+	        ],
+
+	        accessory = [[NSView alloc] initWithFrame:NSMakeRect( 0, 0, width, scrollHeight )],
+	        alert = [[NSAlert alloc] init];
+
+	    [matrix setCellSize:NSMakeSize( width, matrixCellHeight )];
+	    
+	    results.forEach( function( res, i ) {
+	    	var cell = [matrix cells][ i ],
+	    		title = [@"" stringByAppendingString:res.name];
+
+	    	title = stringByTruncatingToWidth( title, width );
+		    
+		    [cell setButtonType:NSRadioButton];
+		    [cell setTitle:stringByTruncatingToWidth( title, width )];
+		    [cell setTag:i];
+	  	} );
+	    
+	    [scrollView setDrawsBackground:false];
+	  	[scrollView setHasVerticalScroller:true];
+		[scrollView setDocumentView:matrix];
+	  	[accessory addSubview:scrollView];
+
+	    [alert setAccessoryView:accessory];
+	    [alert addButtonWithTitle:"OK"];
+        [alert addButtonWithTitle:"Cancel"];
+
+	    [alert setMessageText:"Select App"];
+
+	    if( [alert runModal] === NSAlertFirstButtonReturn ) {
+		    return results[ [[matrix selectedCell] tag] ].artworkUrl
+		} else {
+			return null;
+		}
+	}
+	function getiTunesAPIResponse( terms, entity ) {
+        var err = [[MOPointer alloc] init],
+        	url = "https://itunes.apple.com/search?term=" + encodeURIComponent( terms ) + "&entity=" + entity,
+        	apiUrl = [NSURL URLWithString:url],
+        	request = [NSURLRequest requestWithURL:apiUrl],
+        	response = [NSURLConnection sendSynchronousRequest:request returningResponse:null error:err];
+
+        if( ![err value] ) {
+        	return [NSJSONSerialization JSONObjectWithData:response options:null error:null];
+        } else {
+        	log( [err value] );
+        	throw "Failed to locate iTunes app. Please try again"
+        }
+    }
+    function getiTunesArtwork() {
+    	var search = promptUserSearch(),
+			err = [[MOPointer alloc] init],
+			json,
+			jsonResults,
+			
+			imgUrl,
+			imgRequest,
+			imgData;
+
+		if( search ) {
+			json = getiTunesAPIResponse( search.terms, search.entity );
+
+			if( typeof json !== "undefined" ) {
+				// Convert to JS object
+				json = JSON.parse( String( stringifyJSON( json ) ) );
+				jsonResults = json.results.map( function( res ) {
+					var small = res.artworkUrl60,
+						med = res.artworkUrl100,
+						large = res.artworkUrl512,
+						name = res.trackName;
+
+					return {
+						name: name,
+						artworkUrl: large || med || small || ""
+					};
+				} );
+			}
+
+			if( typeof jsonResults !== "undefined" ) {
+				imgUrl = promptUserForArtwork( jsonResults );
+				log( imgUrl );
+
+				if( imgUrl ) {
+					imgUrl = [NSURL URLWithString:imgUrl];
+					
+					imgRequest = [NSURLRequest requestWithURL:imgUrl];
+					imgData = [NSURLConnection sendSynchronousRequest:imgRequest returningResponse:null error:err];
+
+					if( ![err value] ) {
+						( function( selection, img ) {
+							var layer,
+								frame,
+								parentGroup,
+								page = doc.currentPage(),
+
+								newLayer,
+								newFrame;
+							
+							for( var i = 0, len = [selection count]; i < len; i++ ) {
+								layer = selection[ i ];
+								frame = [layer frame];
+								parentGroup = [layer parentGroup];
+
+								if( [layer className] == "MSShapeGroup" ) {
+									newLayer = [MSBitmapLayer bitmapLayerFromImage:img];
+									newFrame = [newLayer frame];
+
+									newLayer.name = [layer name];
+
+									[newFrame setConstrainProportions: false];
+									[newFrame setX:[frame x]];
+									[newFrame setY:[frame y]];
+									[newFrame setWidth:[frame width]];
+									[newFrame setHeight:[frame height]];
+									[newFrame setConstrainProportions: true];
+
+									[layer removeFromParent];
+
+									if( parentGroup ) {
+										[parentGroup insertLayers:[ newLayer ] afterLayer:layer];
+									} else {
+										[page addLayers:[ newLayer ]];
+									}
+
+								} else if( [layer className] == "MSBitmapLayer" ) {
+									var data = [[MSImageData new] initWithImage:img convertColorSpace:false];
+									layer.image = data;
+								}
+							}
+
+						} )( selection, [[NSImage alloc] initWithData:imgData] );
+					} else {
+						throw [err value];
+					}
+				}
+			}
+		}
+    }
+
+    try{
+    	var className;
+
+    	if( [selection count] > 0 ) {
+	    	className = [[selection firstObject] className];
+	    	if( className == "MSShapeGroup" || className == "MSBitmapLayer" ) {
+	    		getiTunesArtwork();
+	    	} else {
+	    		doc.showMessage( "Please select Rectangle or Image layers" );
+	    	}
+	    } else {
+	    	doc.showMessage( "No selection. Please select Rectangle or Image layers" );
+	    }
+    } catch( err ) {
+    	log( "Uncaught error: " + err );
+    }
+}

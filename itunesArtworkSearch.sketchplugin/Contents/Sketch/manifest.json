@@ -1,0 +1,26 @@
+{
+    "author": "Jon May",
+    "authorEmail": "jon.m.may@gmail.com",
+    "name": "iTunes Icon Search",
+    "description": "Replace rectangle shapes or image layers with iTunes app artwork.",
+    "version": "1",
+    "compatibleVersion": "3.5",
+    "homepage": "",
+    "updateURL": "",
+    "identifier": "com.jonmmay.sketch.itunes-artwork-search",
+    "commands": [
+        {
+            "script": "script.sketchscript",
+            "handler": "onRun",
+            "shortcut": "",
+            "name": "iTunes App Artwork",
+            "identifier": "itunesArtwork"
+        }
+    ],
+    "menu": {
+        "isRoot": true,
+        "items": [
+            "itunesArtwork"
+        ]
+    }
+}
