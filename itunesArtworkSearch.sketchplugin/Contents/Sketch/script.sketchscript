@@ -247,7 +247,7 @@ function onRun( context ) {
 								parentGroup = [layer parentGroup];
 
 								if( [layer className] == "MSShapeGroup" ) {
-									newLayer = [MSBitmapLayer bitmapLayerFromImage:img];
+									newLayer = [MSBitmapLayer bitmapLayerFromImage:img withSizeScaledDownByFactor:1];
 									newFrame = [newLayer frame];
 
 									newLayer.name = [layer name];
